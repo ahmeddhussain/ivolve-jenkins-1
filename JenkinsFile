@@ -6,7 +6,6 @@ pipeline {
         IMAGE_NAME      = "ahmedkhater2611/jenkins-app"
         IMAGE_TAG       = "${BUILD_NUMBER}"
         JAR_NAME        = "demo-0.0.1-SNAPSHOT.jar"
-        KUBECONFIG_CRED = credentials('kubeconfig-cred')
     }
 
     stages {
@@ -57,10 +56,15 @@ pipeline {
 
         stage('Deploy to K8s Cluster') {
             steps {
-                sh """
-                    export KUBECONFIG=\$KUBECONFIG_CRED
-                    kubectl apply -f deployment.yaml
-                """
+                withCredentials([file(credentialsId: 'jenkins-sa-token', variable: 'SA_TOKEN_FILE')]) {
+                    sh '''
+                        kubectl apply -f deployment.yaml \
+                          --server=https://192.168.49.2:6443 \
+                          --insecure-skip-tls-verify=true \
+                          --token=$(cat $SA_TOKEN_FILE) \
+                          -n ivolve
+                    '''
+                }
             }
         }
     }
