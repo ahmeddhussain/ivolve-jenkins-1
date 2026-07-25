@@ -1,0 +1,79 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKERHUB_CREDS = credentials('docker')
+        IMAGE_NAME      = "ahmedkhater2611/jenkins-app"
+        IMAGE_TAG       = "${BUILD_NUMBER}"
+        JAR_NAME        = "demo-0.0.1-SNAPSHOT.jar"
+        KUBECONFIG_CRED = credentials('kubeconfig-cred')
+    }
+
+    stages {
+
+        stage('Run Unit Test') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+
+        stage('Build App') {
+            steps {
+                sh 'mvn clean package -DskipTests'
+            }
+            post {
+                success {
+                    sh "ls -la target/${JAR_NAME}"
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+            }
+        }
+
+        stage('Push Image to Docker Hub') {
+            steps {
+                sh """
+                    echo \$DOCKERHUB_CREDS_PSW | docker login -u \$DOCKERHUB_CREDS_USR --password-stdin
+                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                """
+            }
+        }
+
+        stage('Delete Image Locally') {
+            steps {
+                sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG}"
+            }
+        }
+
+        stage('Update deployment.yaml') {
+            steps {
+                sh "sed -i 's|image:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' deployment.yaml"
+            }
+        }
+
+        stage('Deploy to K8s Cluster') {
+            steps {
+                sh """
+                    export KUBECONFIG=\$KUBECONFIG_CRED
+                    kubectl apply -f deployment.yaml
+                """
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'docker logout || true'
+        }
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed — check logs above.'
+        }
+    }
+}
