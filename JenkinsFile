@@ -26,17 +26,27 @@ pipeline {
             }
         }
 
-        stage('Build & Push Image') {
-            steps {
-                buildImage("${IMAGE_NAME}", "${IMAGE_TAG}")
-            }
-        }
+       stage('Build & Push Image') {
+    steps {
+        buildImage(
+            imageName: "${IMAGE_NAME}",
+            imageTag:  "${IMAGE_TAG}",
+            credsId:   'docker'
+        )
+    }
+}
 
-        stage('Deploy') {
-            steps {
-                deployOnK8s("${IMAGE_NAME}", "${IMAGE_TAG}", "${NAMESPACE}", "${API_SERVER}")
-            }
-        }
+stage('Deploy') {
+    steps {
+        deployOnK8s(
+            imageName: "${IMAGE_NAME}",
+            imageTag:  "${IMAGE_TAG}",
+            namespace: "${NAMESPACE}",
+            apiServer: "${API_SERVER}",
+            credsId:   'jenkins-sa-token'
+        )
+    }
+}
     }
 
     post {
