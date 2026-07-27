@@ -2,6 +2,9 @@
 
 pipeline {
     agent { label 'agent-1' }
+   tools {
+       maven 'Maven3'
+   }
    
     environment {
         IMAGE_NAME = "ahmedkhater2611/jenkins-app"
