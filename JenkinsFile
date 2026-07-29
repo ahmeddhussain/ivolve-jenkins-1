@@ -1,60 +1,64 @@
 @Library('jenkins-shared-lib') _
-
 pipeline {
-    agent { label 'agent-1' }
-   tools {
-       maven 'Maven3'
-   }
-   
+    agent { any }
+    tools {
+        maven 'Maven3'
+    }
+
     environment {
         IMAGE_NAME = "ahmedkhater2611/jenkins-app"
         IMAGE_TAG  = "${BUILD_NUMBER}"
         NAMESPACE  = "ivolve"
-        API_SERVER = "https://192.168.49.2:8443"
     }
-
     stages {
         stage('Checkout') {
             steps {
                 git branch: 'main', url: 'https://github.com/ahmeddhussain/ivolve-jenkins-1.git'
             }
         }
-
         stage('Build App') {
             steps {
                 buildApp()
             }
         }
-
-       stage('Build & Push Image') {
-    steps {
-        buildImage(
-            imageName: "${IMAGE_NAME}",
-            imageTag:  "${IMAGE_TAG}",
-            credsId:   'docker'
-        )
+        stage('Build & Push Image') {
+            steps {
+                buildImage(
+                    imageName: "${IMAGE_NAME}",
+                    imageTag:  "${IMAGE_TAG}",
+                    credsId:   'docker'
+                )
+            }
+        }
+        stage('Update deployment.yaml') {
+            steps {
+                sh "sed -i 's|image:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' deployment.yaml"
+            }
+        }
+        stage('Push Update to GitHub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'git-hub',
+                    usernameVariable: 'GIT_USER',
+                    passwordVariable: 'GIT_TOKEN'
+                )]) {
+                    sh """
+                        git config user.name "jenkins-ci"
+                        git config user.email "jenkins-ci@example.com"
+                        git add deployment.yaml
+                        git commit -m "Update image to ${IMAGE_NAME}:${IMAGE_TAG}"
+                        git push https://\$GIT_USER:\$GIT_TOKEN@github.com/ahmeddhussain/ivolve-jenkins-1.git HEAD:main
+                    """
+                }
+            }
+        }
     }
-}
-
-stage('Deploy') {
-    steps {
-        deployOnK8s(
-            imageName: "${IMAGE_NAME}",
-            imageTag:  "${IMAGE_TAG}",
-            namespace: "${NAMESPACE}",
-            apiServer: "${API_SERVER}",
-            credsId:   'jenkins-sa-token'
-        )
-    }
-}
-    }
-
     post {
         always {
             echo 'Pipeline finished.'
         }
         success {
-            echo 'Deployment completed successfully.'
+            echo 'Manifest updated and pushed — ArgoCD will sync the new deployment automatically.'
         }
         failure {
             echo 'Pipeline failed — check logs above.'
